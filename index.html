@@ -1,0 +1,1822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Logitech 1080p → 9:16 Vertical HD Recorder</title>
+  <style>
+    :root {
+      --bg: #0d1017;
+      --panel: #151a24;
+      --panel-2: #1b2230;
+      --border: #273043;
+      --text: #eef2f7;
+      --muted: #98a4b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --warn: #f59e0b;
+      --ok: #10b981;
+      --radius: 12px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+    }
+
+    .app {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px 20px 28px;
+      display: grid;
+      grid-template-columns: minmax(300px, 430px) minmax(340px, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .header {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(59, 130, 246, 0.16);
+      color: #93c5fd;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+    }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pill {
+      font-family: var(--mono);
+      font-size: 0.76rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .pill.ok {
+      color: #6ee7b7;
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .pill.warn {
+      color: #fcd34d;
+      border-color: rgba(245, 158, 11, 0.4);
+      background: rgba(245, 158, 11, 0.12);
+    }
+
+    .pill.rec {
+      color: #fecaca;
+      border-color: rgba(239, 68, 68, 0.55);
+      background: rgba(239, 68, 68, 0.18);
+      animation: pulse 1.2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.55; }
+    }
+
+    /* Preview Stage */
+    .stage-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: sticky;
+      top: 16px;
+    }
+
+    .viewport-wrap {
+      position: relative;
+      width: min(100%, calc(72vh * 9 / 16));
+      aspect-ratio: 9 / 16;
+      margin: 0 auto;
+      background: #05070b;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #222a3a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas#previewCanvas {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      transition: transform 0.15s ease;
+    }
+
+    canvas#previewCanvas.mirrored {
+      transform: scaleX(-1);
+    }
+
+    .overlay-prompt {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      gap: 12px;
+      background: rgba(8, 10, 15, 0.86);
+      z-index: 3;
+    }
+
+    .overlay-prompt.hidden {
+      display: none;
+    }
+
+    .overlay-prompt p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.45;
+      max-width: 280px;
+    }
+
+    .rec-hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .rec-badge {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.72);
+      border: 1px solid rgba(239, 68, 68, 0.65);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: #fff;
+    }
+
+    .rec-badge.active {
+      display: inline-flex;
+    }
+
+    .rec-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      animation: pulse 1s infinite;
+    }
+
+    .rec-badge.paused .rec-dot {
+      background: var(--warn);
+      animation: none;
+    }
+
+    .res-tag {
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.68);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: #cbd5e1;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Guide grid (preview only, never drawn to canvas) */
+    .guide-grid {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      display: none;
+    }
+
+    .guide-grid.visible {
+      display: block;
+    }
+
+    .guide-grid::before,
+    .guide-grid::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to right, transparent 33.2%, rgba(255,255,255,0.16) 33.3%, transparent 33.6%, transparent 66.5%, rgba(255,255,255,0.16) 66.6%, transparent 66.9%),
+        linear-gradient(to bottom, transparent 33.2%, rgba(255,255,255,0.16) 33.3%, transparent 33.6%, transparent 66.5%, rgba(255,255,255,0.16) 66.6%, transparent 66.9%);
+    }
+
+    .transport {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      padding: 10px 14px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+    }
+
+    button:hover:not(:disabled) {
+      background: #232c3e;
+      border-color: #3a4660;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    button.record {
+      background: var(--danger);
+      border-color: var(--danger);
+      color: #fff;
+    }
+
+    button.record:hover:not(:disabled) {
+      background: var(--danger-hover);
+      border-color: var(--danger-hover);
+    }
+
+    /* Controls Column */
+    .controls-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 0.94rem;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 580px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    select, input[type="range"] {
+      width: 100%;
+    }
+
+    select {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 0.86rem;
+      font-family: inherit;
+    }
+
+    select:disabled, input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Audio meter */
+    .meter-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .meter-track {
+      height: 10px;
+      width: 100%;
+      background: #0a0d13;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #10b981 0%, #22c55e 65%, #f59e0b 85%, #ef4444 100%);
+      transition: width 0.05s linear;
+    }
+
+    .meter-meta {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    .toggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      padding-top: 2px;
+    }
+
+    .check {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.84rem;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .check input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .notice {
+      font-size: 0.8rem;
+      line-height: 1.45;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(59, 130, 246, 0.09);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      color: #bfdbfe;
+    }
+
+    .notice.warn {
+      background: rgba(245, 158, 11, 0.1);
+      border-color: rgba(245, 158, 11, 0.3);
+      color: #fde68a;
+    }
+
+    .notice.error {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.35);
+      color: #fecaca;
+    }
+
+    .notice.hidden {
+      display: none;
+    }
+
+    /* Recorded takes list */
+    .takes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .empty-takes {
+      font-size: 0.84rem;
+      color: var(--muted);
+      padding: 12px 0 4px;
+    }
+
+    .take-item {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .take-item video {
+      width: 90px;
+      height: 160px;
+      object-fit: cover;
+      border-radius: 7px;
+      background: #000;
+      border: 1px solid #2b3549;
+    }
+
+    .take-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .take-title {
+      font-weight: 700;
+      font-size: 0.86rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .take-meta {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .take-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .take-actions a.btn-link {
+      text-decoration: none;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 7px 12px;
+      border-radius: 7px;
+    }
+
+    .take-actions a.btn-link:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-sm {
+      padding: 6px 10px;
+      font-size: 0.78rem;
+      border-radius: 7px;
+    }
+
+    /* Hidden source video (kept rendered in DOM at 2x2 so Chromium keeps decoding frames) */
+    #sourceVideo {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 2px;
+      height: 2px;
+      opacity: 0.001;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <video id="sourceVideo" autoplay playsinline muted></video>
+
+  <main class="app">
+    <header class="header">
+      <h1>
+        Logitech 1080p → 9:16 Vertical Studio
+        <span class="badge">Local HTML5</span>
+      </h1>
+      <div class="status-row">
+        <span id="camStatusPill" class="pill">Camera: Idle</span>
+        <span id="outStatusPill" class="pill">Output: 720×1280</span>
+        <span id="codecStatusPill" class="pill">Format: Detecting…</span>
+      </div>
+    </header>
+
+    <!-- Left: 9:16 Live Preview & Transport -->
+    <section class="stage-card">
+      <div class="viewport-wrap">
+        <canvas id="previewCanvas" width="720" height="1280"></canvas>
+        <div id="guideGrid" class="guide-grid"></div>
+
+        <div class="rec-hud">
+          <div id="recBadge" class="rec-badge">
+            <span class="rec-dot"></span>
+            <span id="recTimerText">00:00</span>
+          </div>
+          <div id="resOverlayTag" class="res-tag">720×1280 @ 30fps</div>
+        </div>
+
+        <div id="startOverlay" class="overlay-prompt">
+          <p id="overlayPromptText">Connect your Logitech 1080p webcam and click below to grant camera &amp; microphone access.</p>
+          <button id="overlayStartBtn" class="primary">Start Camera &amp; Mic</button>
+          <a id="localhostLinkBtn" href="http://127.0.0.1:8090/" style="display: none; text-decoration: none; background: #10b981; color: #052e16; font-weight: 700; font-size: 0.85rem; padding: 9px 14px; border-radius: 9px;">Open http://127.0.0.1:8090/</a>
+          <div id="overlayErrorText" style="font-size: 0.78rem; color: #fca5a5; max-width: 300px; line-height: 1.4; display: none;"></div>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button id="recBtn" class="record" disabled>● Start Recording</button>
+        <button id="pauseBtn" disabled>Pause</button>
+        <button id="stopBtn" disabled>Stop</button>
+      </div>
+    </section>
+
+    <!-- Right: Controls & Recorded Takes -->
+    <section class="controls-col">
+      <div id="errorBox" class="notice error hidden"></div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>1. Camera &amp; Microphone</span>
+          <button id="refreshDevicesBtn" class="btn-sm">Detect / Refresh</button>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="cameraSelect">Webcam</label>
+            <select id="cameraSelect"></select>
+          </div>
+          <div class="field">
+            <label for="micSelect">Microphone</label>
+            <select id="micSelect"></select>
+          </div>
+        </div>
+
+        <div class="meter-wrap">
+          <label>
+            <span>Live Mic Level</span>
+            <span id="micDbText" style="font-family: var(--mono);">Muted / Idle</span>
+          </label>
+          <div class="meter-track">
+            <div id="micMeterFill" class="meter-fill"></div>
+          </div>
+          <div class="meter-meta">
+            <span id="sourceInfoText">Source: Waiting for camera…</span>
+            <span id="micPeakText">Peak: 0%</span>
+          </div>
+          <div id="diagStatusText" style="font-family: var(--mono); font-size: 0.72rem; color: var(--muted); padding-top: 2px;">
+            Status: Checking browser media access…
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>2. 9:16 Orientation &amp; Resolution</span>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="mountModeSelect">Webcam Physical Orientation</label>
+            <select id="mountModeSelect">
+              <option value="crop" selected>Horizontal Mount (Center 9:16 Crop)</option>
+              <option value="rotate90cw">Rotated 90° Clockwise (True 1080×1920)</option>
+              <option value="rotate90ccw">Rotated 90° Counter-CW (True 1080×1920)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="outputResSelect">Recorded Output Size</label>
+            <select id="outputResSelect">
+              <option value="1080x1920">1080 × 1920 (Full HD 9:16)</option>
+              <option value="720x1280" selected>720 × 1280 (HD 9:16)</option>
+              <option value="608x1080">608 × 1080 (Native Horizontal Crop)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="panField" class="field">
+          <label for="panSlider">
+            <span>Horizontal Crop Position (Framing)</span>
+            <span id="panValueText" style="font-family: var(--mono);">Center (50%)</span>
+          </label>
+          <input id="panSlider" type="range" min="0" max="100" value="50" />
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="fpsSelect">Frame Rate</label>
+            <select id="fpsSelect">
+              <option value="30" selected>30 fps (Recommended)</option>
+              <option value="60">60 fps (If supported by webcam)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="bitrateSelect">Video Bitrate</label>
+            <select id="bitrateSelect">
+              <option value="6000000">6 Mbps (Compact)</option>
+              <option value="10000000" selected>10 Mbps (Sharp HD)</option>
+              <option value="16000000">16 Mbps (Max Detail)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="formatSelect">Recording Format</label>
+            <select id="formatSelect"></select>
+          </div>
+
+          <div class="field" style="justify-content: flex-end;">
+            <div class="toggles">
+              <label class="check" title="Flips only the live preview CSS; saved video keeps text readable">
+                <input id="mirrorPreviewCheck" type="checkbox" />
+                Mirror preview only
+              </label>
+              <label class="check">
+                <input id="gridGuideCheck" type="checkbox" />
+                3×3 grid guide
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div id="qualityNote" class="notice">
+          Horizontal webcam uses a center 9:16 crop (608×1080 native, scaled cleanly to 720×1280 HD).
+          For true native 1080×1920 Full HD with zero upscaling, rotate your Logitech webcam 90° and choose a Rotated 90° mode.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>3. Recorded Takes</span>
+          <span id="takesCountText" style="font-size: 0.78rem; color: var(--muted);">0 files</span>
+        </div>
+        <div id="takesList" class="takes-list">
+          <div class="empty-takes">No recordings yet. Press <strong>Start Recording</strong> to capture a 9:16 clip.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      // DOM elements
+      const sourceVideo = document.getElementById('sourceVideo');
+      const canvas = document.getElementById('previewCanvas');
+      const ctx = canvas.getContext('2d', { alpha: false });
+
+      const startOverlay = document.getElementById('startOverlay');
+      const overlayStartBtn = document.getElementById('overlayStartBtn');
+      const localhostLinkBtn = document.getElementById('localhostLinkBtn');
+      const overlayErrorText = document.getElementById('overlayErrorText');
+      const refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
+
+      const cameraSelect = document.getElementById('cameraSelect');
+      const micSelect = document.getElementById('micSelect');
+      const mountModeSelect = document.getElementById('mountModeSelect');
+      const outputResSelect = document.getElementById('outputResSelect');
+      const panField = document.getElementById('panField');
+      const panSlider = document.getElementById('panSlider');
+      const panValueText = document.getElementById('panValueText');
+      const fpsSelect = document.getElementById('fpsSelect');
+      const bitrateSelect = document.getElementById('bitrateSelect');
+      const formatSelect = document.getElementById('formatSelect');
+      const mirrorPreviewCheck = document.getElementById('mirrorPreviewCheck');
+      const gridGuideCheck = document.getElementById('gridGuideCheck');
+      const guideGrid = document.getElementById('guideGrid');
+
+      const recBtn = document.getElementById('recBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const recBadge = document.getElementById('recBadge');
+      const recTimerText = document.getElementById('recTimerText');
+      const resOverlayTag = document.getElementById('resOverlayTag');
+
+      const camStatusPill = document.getElementById('camStatusPill');
+      const outStatusPill = document.getElementById('outStatusPill');
+      const codecStatusPill = document.getElementById('codecStatusPill');
+      const sourceInfoText = document.getElementById('sourceInfoText');
+      const diagStatusText = document.getElementById('diagStatusText');
+      const micMeterFill = document.getElementById('micMeterFill');
+      const micDbText = document.getElementById('micDbText');
+      const micPeakText = document.getElementById('micPeakText');
+      const qualityNote = document.getElementById('qualityNote');
+      const errorBox = document.getElementById('errorBox');
+      const takesList = document.getElementById('takesList');
+      const takesCountText = document.getElementById('takesCountText');
+
+      // State
+      let mediaStream = null;
+      let audioCtx = null;
+      let analyserNode = null;
+      let micSourceNode = null;
+      let meterDataArray = null;
+      let peakHold = 0;
+      let peakHoldDecayAt = 0;
+
+      let mediaRecorder = null;
+      let recordedChunks = [];
+      let isRecording = false;
+      let isPaused = false;
+      let recordingStartMs = 0;
+      let accumulatedMs = 0;
+      let timerInterval = null;
+
+      let drawRafId = null;
+      let workerTimer = null;
+      let trackReader = null;
+      let usingTrackProcessor = false;
+      let lastDrawMs = 0;
+      let fpsWindowFrames = 0;
+      let fpsWindowStartMs = 0;
+      let currentSourceDims = { w: 0, h: 0 };
+      let takeCounter = 0;
+      let hasAutoSelectedLogitech = false;
+      const recordedUrls = [];
+
+      // Candidate MIME types ordered by compatibility + quality
+      const MIME_CANDIDATES = [
+        { mime: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', label: 'MP4 (H.264 + AAC)', ext: 'mp4' },
+        { mime: 'video/mp4;codecs=avc1,mp4a', label: 'MP4 (H.264 + AAC)', ext: 'mp4' },
+        { mime: 'video/mp4', label: 'MP4 (Browser Default)', ext: 'mp4' },
+        { mime: 'video/webm;codecs=vp9,opus', label: 'WebM (VP9 + Opus)', ext: 'webm' },
+        { mime: 'video/webm;codecs=h264,opus', label: 'WebM (H.264 + Opus)', ext: 'webm' },
+        { mime: 'video/webm;codecs=vp8,opus', label: 'WebM (VP8 + Opus)', ext: 'webm' },
+        { mime: 'video/webm', label: 'WebM (Browser Default)', ext: 'webm' }
+      ];
+
+      function showError(msg) {
+        if (!msg) {
+          errorBox.classList.add('hidden');
+          errorBox.textContent = '';
+          overlayErrorText.style.display = 'none';
+          overlayErrorText.textContent = '';
+          return;
+        }
+        errorBox.textContent = msg;
+        errorBox.classList.remove('hidden');
+        overlayErrorText.textContent = msg;
+        overlayErrorText.style.display = 'block';
+      }
+
+      function formatDuration(ms) {
+        const totalSec = Math.max(0, Math.floor(ms / 1000));
+        const mins = String(Math.floor(totalSec / 60)).padStart(2, '0');
+        const secs = String(totalSec % 60).padStart(2, '0');
+        return `${mins}:${secs}`;
+      }
+
+      function formatBytes(bytes) {
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      function getTargetDimensions() {
+        const [w, h] = outputResSelect.value.split('x').map(Number);
+        return { width: w, height: h };
+      }
+
+      function syncCanvasDimensions() {
+        const { width, height } = getTargetDimensions();
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+        const fps = Number(fpsSelect.value);
+        outStatusPill.textContent = `Output: ${width}×${height}`;
+        resOverlayTag.textContent = `${width}×${height} @ ${fps}fps`;
+        updateQualityAdvice();
+      }
+
+      function updateQualityAdvice() {
+        const mode = mountModeSelect.value;
+        const { width, height } = getTargetDimensions();
+        const isCrop = mode === 'crop';
+        panField.style.display = isCrop ? 'flex' : 'none';
+
+        if (isCrop && width === 1080) {
+          qualityNote.className = 'notice warn';
+          qualityNote.textContent =
+            'Notice: Horizontal 1920×1080 feed gives a 608×1080 center slice, so 1080×1920 is ~1.78× upscaled. ' +
+            'Use 720×1280 HD for sharper scaling, or physically rotate your Logitech webcam 90° for true native 1080×1920.';
+        } else if (!isCrop && width === 1080) {
+          qualityNote.className = 'notice';
+          qualityNote.textContent =
+            'True 1080×1920 Full HD mode active: rotates the 1920×1080 webcam feed 90° pixel-for-pixel with zero cropping or upscaling.';
+        } else if (!isCrop && width === 608) {
+          qualityNote.className = 'notice';
+          qualityNote.textContent =
+            'In Rotated 90° mode you can pick 1080×1920 (Full HD) or 720×1280 (HD) for higher resolution than 608×1080.';
+        } else {
+          qualityNote.className = 'notice';
+          qualityNote.textContent =
+            `Recording ${width}×${height} (9:16). Horizontal crop uses a 608×1080 center slice from a 1080p feed.`;
+        }
+      }
+
+      function populateFormats() {
+        formatSelect.innerHTML = '';
+        if (typeof MediaRecorder === 'undefined') {
+          showError('MediaRecorder API is not supported in this browser. Please open this app in Google Chrome or Microsoft Edge.');
+          return;
+        }
+
+        const supported = MIME_CANDIDATES.filter((c) => {
+          try {
+            return MediaRecorder.isTypeSupported(c.mime);
+          } catch {
+            return false;
+          }
+        });
+
+        if (supported.length === 0) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'Default Browser Format';
+          formatSelect.appendChild(opt);
+          codecStatusPill.textContent = 'Format: Default';
+          return;
+        }
+
+        supported.forEach((item, idx) => {
+          const opt = document.createElement('option');
+          opt.value = item.mime;
+          opt.dataset.ext = item.ext;
+          opt.textContent = item.label;
+          if (idx === 0) opt.selected = true;
+          formatSelect.appendChild(opt);
+        });
+
+        updateFormatPill();
+      }
+
+      function updateFormatPill() {
+        const selected = formatSelect.options[formatSelect.selectedIndex];
+        if (!selected) return;
+        const ext = (selected.dataset.ext || 'webm').toUpperCase();
+        codecStatusPill.textContent = `Format: ${ext}`;
+      }
+
+      let hasAttemptedCamera = false;
+
+      function pickPreferredLogitechCam(cams) {
+        const physical = cams.find(
+          (c) => /logitech|c920|c922|c925|c930|brio|streamcam/i.test(c.label || '') &&
+                 !/capture|virtual/i.test(c.label || '')
+        );
+        if (physical) return physical;
+        return cams.find((c) => /logi|brio|c920|c922|c930|streamcam/i.test(c.label || '')) || null;
+      }
+
+      async function enumerateMediaDevices(preferredCamId, preferredMicId) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+          cameraSelect.innerHTML = '';
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'Blocked here — open via Start_Recorder.bat';
+          cameraSelect.appendChild(opt);
+          diagStatusText.textContent = `Context: ${location.protocol} (mediaDevices API unavailable — run Start_Recorder.bat)`;
+          return { cams: [], mics: [], supported: false };
+        }
+        const prevCam = preferredCamId !== undefined ? preferredCamId : cameraSelect.value;
+        const prevMic = preferredMicId !== undefined ? preferredMicId : micSelect.value;
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter((d) => d.kind === 'videoinput');
+        const mics = devices.filter((d) => d.kind === 'audioinput');
+        const hasLabels = cams.some((c) => Boolean(c.label));
+
+        diagStatusText.textContent =
+          `Context: ${location.protocol}//${location.host || 'local-file'} | ` +
+          `Detected: ${cams.length} camera(s), ${mics.length} mic(s)` +
+          `${hasLabels ? '' : ' (click Start Camera & Mic to unlock)'}`;
+
+        cameraSelect.innerHTML = '';
+        if (cams.length === 0) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = hasAttemptedCamera
+            ? 'No camera detected (check USB / browser / privacy)'
+            : 'Click "Start Camera & Mic" to detect';
+          cameraSelect.appendChild(opt);
+        } else {
+          const preferredLogi = pickPreferredLogitechCam(cams);
+          cams.forEach((cam, idx) => {
+            const opt = document.createElement('option');
+            opt.value = cam.deviceId;
+            opt.textContent = cam.label || `Camera ${idx + 1} (unlock permission to see name)`;
+            cameraSelect.appendChild(opt);
+          });
+          if (prevCam && cams.some((c) => c.deviceId === prevCam)) {
+            cameraSelect.value = prevCam;
+          } else if (preferredLogi && preferredLogi.deviceId) {
+            cameraSelect.value = preferredLogi.deviceId;
+          }
+        }
+
+        micSelect.innerHTML = '';
+        const noAudioOpt = document.createElement('option');
+        noAudioOpt.value = '__none__';
+        noAudioOpt.textContent = 'No Audio (Video Only)';
+        micSelect.appendChild(noAudioOpt);
+
+        mics.forEach((mic, idx) => {
+          const opt = document.createElement('option');
+          opt.value = mic.deviceId;
+          opt.textContent = mic.label || `Microphone ${idx + 1}`;
+          micSelect.appendChild(opt);
+        });
+
+        if (prevMic && (prevMic === '__none__' || mics.some((m) => m.deviceId === prevMic))) {
+          micSelect.value = prevMic;
+        } else if (mics.length > 0) {
+          const logiMic = mics.find((m) => /logi|brio|c920|c922|c930|streamcam/i.test(m.label || ''));
+          micSelect.value = logiMic ? logiMic.deviceId : mics[0].deviceId;
+        }
+
+        return { cams, mics, supported: true };
+      }
+
+      function stopCurrentStream() {
+        stopRenderLoop();
+        if (micSourceNode) {
+          try { micSourceNode.disconnect(); } catch {}
+          micSourceNode = null;
+        }
+        analyserNode = null;
+        meterDataArray = null;
+        micMeterFill.style.width = '0%';
+        micDbText.textContent = 'Muted / Idle';
+        micPeakText.textContent = 'Peak: 0%';
+
+        if (mediaStream) {
+          mediaStream.getTracks().forEach((track) => track.stop());
+          mediaStream = null;
+        }
+        sourceVideo.srcObject = null;
+      }
+
+      function setupAudioMeter(stream) {
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          micDbText.textContent = 'Video Only (No Mic)';
+          return;
+        }
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        if (!audioCtx) {
+          audioCtx = new AudioContextClass();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {});
+        }
+
+        const audioOnlyStream = new MediaStream(audioTracks);
+        micSourceNode = audioCtx.createMediaStreamSource(audioOnlyStream);
+        analyserNode = audioCtx.createAnalyser();
+        analyserNode.fftSize = 1024;
+        analyserNode.smoothingTimeConstant = 0.65;
+        // Connect strictly to analyser (NOT audioCtx.destination) so mic audio never echoes in speakers
+        micSourceNode.connect(analyserNode);
+        meterDataArray = new Uint8Array(analyserNode.fftSize);
+        peakHold = 0;
+      }
+
+      function updateAudioMeter() {
+        if (!analyserNode || !meterDataArray) return;
+
+        analyserNode.getByteTimeDomainData(meterDataArray);
+        let sumSq = 0;
+        let maxAbs = 0;
+        for (let i = 0; i < meterDataArray.length; i++) {
+          const normalized = (meterDataArray[i] - 128) / 128;
+          const absVal = Math.abs(normalized);
+          if (absVal > maxAbs) maxAbs = absVal;
+          sumSq += normalized * normalized;
+        }
+
+        const rms = Math.sqrt(sumSq / meterDataArray.length);
+        // Perceptual scale so normal speech sits nicely between 35% and 85%
+        const pct = Math.min(100, Math.round(Math.pow(rms * 2.8, 0.72) * 100));
+        const now = performance.now();
+        if (pct >= peakHold || now > peakHoldDecayAt) {
+          peakHold = pct;
+          peakHoldDecayAt = now + 900;
+        }
+
+        micMeterFill.style.width = `${pct}%`;
+        micPeakText.textContent = `Peak: ${peakHold}%`;
+        if (maxAbs > 0.96) {
+          micDbText.textContent = 'CLIPPING';
+          micDbText.style.color = '#f87171';
+        } else {
+          const db = rms > 0.0001 ? Math.max(-60, Math.round(20 * Math.log10(rms))) : -60;
+          micDbText.textContent = `${db} dBFS`;
+          micDbText.style.color = 'var(--muted)';
+        }
+      }
+
+      async function tryGetStream(constraints) {
+        return navigator.mediaDevices.getUserMedia(constraints);
+      }
+
+      async function startCamera() {
+        showError('');
+        hasAttemptedCamera = true;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          await enumerateMediaDevices().catch(() => {});
+          showError(
+            'Camera API is blocked in this context. Run Start_Recorder.bat in this folder to open the app in Chrome/Edge on http://127.0.0.1.'
+          );
+          return;
+        }
+
+        recBtn.disabled = true;
+        camStatusPill.textContent = 'Camera: Starting…';
+        camStatusPill.className = 'pill warn';
+
+        const hadActiveStream = Boolean(mediaStream);
+        stopCurrentStream();
+        if (hadActiveStream) {
+          // Give Windows UVC/DirectShow drivers a brief moment to release the previous device
+          await new Promise((r) => setTimeout(r, 250));
+        }
+
+        const selectedCamId = cameraSelect.value;
+        const selectedCamLabel = cameraSelect.options[cameraSelect.selectedIndex]
+          ? cameraSelect.options[cameraSelect.selectedIndex].textContent
+          : '';
+        const selectedMicId = micSelect.value;
+        const fps = Number(fpsSelect.value);
+
+        const videoConstraints = {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: fps }
+        };
+        if (selectedCamId) {
+          videoConstraints.deviceId = { exact: selectedCamId };
+        }
+
+        let audioConstraints = false;
+        if (selectedMicId !== '__none__') {
+          audioConstraints = {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          };
+          if (selectedMicId) {
+            audioConstraints.deviceId = { exact: selectedMicId };
+          }
+        }
+
+        try {
+          mediaStream = await tryGetStream({
+            video: videoConstraints,
+            audio: audioConstraints
+          });
+        } catch (err) {
+          let fallbackErr = err;
+          let recovered = false;
+
+          // 1) If USB webcam cold-start timed out (AbortError), retry WITH audio still enabled
+          if (fallbackErr && fallbackErr.name === 'AbortError') {
+            await new Promise((r) => setTimeout(r, 400));
+            try {
+              mediaStream = await tryGetStream({
+                video: videoConstraints,
+                audio: audioConstraints
+              });
+              recovered = true;
+            } catch (retryErr) {
+              fallbackErr = retryErr;
+            }
+          }
+
+          // 2) If specific mic failed, try browser default mic before giving up on audio
+          if (!recovered && audioConstraints && typeof audioConstraints === 'object' && audioConstraints.deviceId) {
+            try {
+              mediaStream = await tryGetStream({
+                video: videoConstraints,
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+              });
+              recovered = true;
+            } catch (defMicErr) {
+              fallbackErr = defMicErr;
+            }
+          }
+
+          // 3) Retry without microphone if audio genuinely failed
+          if (!recovered && audioConstraints) {
+            try {
+              mediaStream = await tryGetStream({ video: videoConstraints, audio: false });
+              micSelect.value = '__none__';
+              showError(`Microphone unavailable (${fallbackErr.message}). Running in Video-Only mode.`);
+              recovered = true;
+            } catch (e2) {
+              fallbackErr = e2;
+            }
+          }
+
+          // 4) Retry without exact deviceId / FPS if constraint was rejected
+          if (!recovered && (fallbackErr.name === 'NotFoundError' || fallbackErr.name === 'OverconstrainedError')) {
+            try {
+              mediaStream = await tryGetStream({
+                video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+                audio: audioConstraints ? true : false
+              });
+              recovered = true;
+            } catch (e3) {
+              fallbackErr = e3;
+            }
+          }
+
+          // 5) Final fallback: bare video: true
+          if (!recovered && (fallbackErr.name === 'NotFoundError' || fallbackErr.name === 'OverconstrainedError')) {
+            try {
+              mediaStream = await tryGetStream({ video: true, audio: false });
+              recovered = true;
+            } catch (e4) {
+              fallbackErr = e4;
+            }
+          }
+
+          if (!recovered) {
+            await enumerateMediaDevices().catch(() => {});
+            handleCameraError(fallbackErr, selectedCamLabel);
+            return;
+          }
+        }
+
+        sourceVideo.srcObject = mediaStream;
+        try {
+          await sourceVideo.play();
+        } catch (playErr) {
+          handleCameraError(playErr, selectedCamLabel);
+          return;
+        }
+
+        const vTrack = mediaStream.getVideoTracks()[0];
+        const aTrack = mediaStream.getAudioTracks()[0];
+        const settings = vTrack ? vTrack.getSettings() : {};
+        const aSettings = aTrack ? aTrack.getSettings() : {};
+        const activeCamId = settings.deviceId || undefined;
+        const activeMicId = selectedMicId === '__none__' ? '__none__' : (aSettings.deviceId || undefined);
+
+        const { cams } = await enumerateMediaDevices(activeCamId, activeMicId);
+
+        if (!selectedCamId && !hasAutoSelectedLogitech) {
+          hasAutoSelectedLogitech = true;
+          const logiCam = pickPreferredLogitechCam(cams);
+          if (logiCam && logiCam.deviceId && logiCam.deviceId !== activeCamId) {
+            cameraSelect.value = logiCam.deviceId;
+            return startCamera();
+          }
+        }
+
+        setupAudioMeter(mediaStream);
+
+        const actualW = sourceVideo.videoWidth || settings.width || 0;
+        const actualH = sourceVideo.videoHeight || settings.height || 0;
+        const actualFps = settings.frameRate ? Math.round(settings.frameRate) : fps;
+        currentSourceDims = { w: actualW, h: actualH };
+
+        sourceInfoText.textContent = `Source: ${actualW}×${actualH} @ ${actualFps}fps`;
+        if (actualW >= 1920 && actualH >= 1080) {
+          camStatusPill.textContent = `Camera: ${actualW}×${actualH} HD`;
+          camStatusPill.className = 'pill ok';
+        } else {
+          camStatusPill.textContent = `Camera: ${actualW}×${actualH}`;
+          camStatusPill.className = 'pill warn';
+        }
+
+        startOverlay.classList.add('hidden');
+        recBtn.disabled = false;
+        startRenderLoop(vTrack);
+      }
+
+      function handleCameraError(err, camLabel) {
+        camStatusPill.textContent = 'Camera: Error';
+        camStatusPill.className = 'pill warn';
+        startOverlay.classList.remove('hidden');
+        const name = err && err.name ? err.name : '';
+        let msg;
+        if (name === 'NotReadableError' || name === 'AbortError') {
+          msg = `${camLabel || 'Your webcam'} is busy in another app (such as Logi Capture, Logi Tune, OBS, or Zoom). Close that app or pick a different camera from the Webcam dropdown.`;
+        } else if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+          msg = location.protocol === 'file:'
+            ? 'Camera access was blocked on file://. Run Start_Recorder.bat in this folder to open via http://127.0.0.1 in Chrome/Edge.'
+            : 'Camera or microphone permission was denied. Click the camera/lock icon in your browser address bar, set Camera to Allow, and retry.';
+        } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+          msg = 'No working camera detected by the browser. Check the USB cable, Windows Settings → Privacy & security → Camera, or run Start_Recorder.bat in Chrome/Edge.';
+        } else {
+          msg = `Could not start camera (${name || 'Error'}): ${err ? err.message : 'Unknown error'}`;
+        }
+        showError(msg);
+      }
+
+      function drawSourceToCanvas(source, vw, vh) {
+        if (!vw || !vh) return;
+        const cw = canvas.width;
+        const ch = canvas.height;
+        const mode = mountModeSelect.value;
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, cw, ch);
+
+        if (mode === 'crop') {
+          const targetRatio = cw / ch;
+          const srcRatio = vw / vh;
+          let sx = 0, sy = 0, sw = vw, sh = vh;
+
+          if (srcRatio > targetRatio) {
+            sh = vh;
+            sw = vh * targetRatio;
+            const pan = Number(panSlider.value) / 100;
+            sx = (vw - sw) * pan;
+          } else {
+            sw = vw;
+            sh = vw / targetRatio;
+            sy = (vh - sh) * 0.5;
+          }
+
+          ctx.drawImage(source, sx, sy, sw, sh, 0, 0, cw, ch);
+        } else {
+          // Physical 90° rotation (CW or CCW)
+          const effW = vh;
+          const effH = vw;
+          const scale = Math.max(cw / effW, ch / effH);
+          const drawW = vw * scale;
+          const drawH = vh * scale;
+
+          ctx.save();
+          ctx.translate(cw / 2, ch / 2);
+          ctx.rotate(mode === 'rotate90cw' ? Math.PI / 2 : -Math.PI / 2);
+          ctx.drawImage(source, -drawW / 2, -drawH / 2, drawW, drawH);
+          ctx.restore();
+        }
+        lastDrawMs = performance.now();
+      }
+
+      // Draw current webcam frame from <video> element onto the 9:16 canvas
+      function drawFrame() {
+        const vw = sourceVideo.videoWidth;
+        const vh = sourceVideo.videoHeight;
+        if (!vw || !vh || sourceVideo.readyState < 2) return;
+        drawSourceToCanvas(sourceVideo, vw, vh);
+      }
+
+      function trackLiveFps(vw, vh) {
+        const now = performance.now();
+        if (!fpsWindowStartMs) {
+          fpsWindowStartMs = now;
+          fpsWindowFrames = 0;
+        }
+        fpsWindowFrames += 1;
+        const elapsed = now - fpsWindowStartMs;
+        if (elapsed >= 1000) {
+          const liveFps = Math.round((fpsWindowFrames * 1000) / elapsed);
+          const w = vw || currentSourceDims.w;
+          const h = vh || currentSourceDims.h;
+          if (w && h) {
+            sourceInfoText.textContent = `Source: ${w}×${h} @ ${liveFps}fps live`;
+          }
+          fpsWindowStartMs = now;
+          fpsWindowFrames = 0;
+        }
+      }
+
+      function startRenderLoop(vTrack) {
+        stopRenderLoop();
+        fpsWindowFrames = 0;
+        fpsWindowStartMs = 0;
+
+        // UI audio meter loop
+        const rafTick = () => {
+          if (!usingTrackProcessor) {
+            drawFrame();
+          }
+          updateAudioMeter();
+          drawRafId = requestAnimationFrame(rafTick);
+        };
+        drawRafId = requestAnimationFrame(rafTick);
+
+        // Primary path (Chrome/Edge 94+): read VideoFrames directly from MediaStreamTrackProcessor
+        // so occluded/background windows never throttle webcam capture to 1 fps.
+        if (vTrack && typeof MediaStreamTrackProcessor !== 'undefined') {
+          try {
+            const processor = new MediaStreamTrackProcessor({ track: vTrack });
+            const reader = processor.readable.getReader();
+            trackReader = reader;
+            usingTrackProcessor = true;
+            (async () => {
+              try {
+                while (trackReader === reader) {
+                  const { value: frame, done } = await reader.read();
+                  if (done || !frame) break;
+                  try {
+                    const fw = frame.displayWidth || frame.codedWidth;
+                    const fh = frame.displayHeight || frame.codedHeight;
+                    drawSourceToCanvas(frame, fw, fh);
+                    trackLiveFps(fw, fh);
+                  } finally {
+                    frame.close();
+                  }
+                }
+              } catch {
+                // Fall back to <video> render path if reader ends/errors while stream stays open
+                if (trackReader === reader) {
+                  usingTrackProcessor = false;
+                  trackReader = null;
+                }
+              }
+            })();
+          } catch {
+            usingTrackProcessor = false;
+            trackReader = null;
+          }
+        }
+
+        // Unconditional Web Worker timer fallback keeps canvas pumping at target FPS even if occluded
+        const fps = Number(fpsSelect.value);
+        const frameIntervalMs = Math.round(1000 / fps);
+        const workerCode = `
+          let id = null;
+          self.onmessage = (e) => {
+            if (e.data.cmd === 'start') {
+              if (id) clearInterval(id);
+              id = setInterval(() => self.postMessage('tick'), e.data.interval);
+            } else if (e.data.cmd === 'stop') {
+              if (id) clearInterval(id);
+              id = null;
+            }
+          };
+        `;
+        try {
+          const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+          const workerUrl = URL.createObjectURL(workerBlob);
+          workerTimer = new Worker(workerUrl);
+          URL.revokeObjectURL(workerUrl);
+          workerTimer.onmessage = () => {
+            if (!usingTrackProcessor && (performance.now() - lastDrawMs >= frameIntervalMs * 0.85)) {
+              drawFrame();
+            }
+          };
+          workerTimer.postMessage({ cmd: 'start', interval: frameIntervalMs });
+        } catch {
+          // Worker optional; requestAnimationFrame remains active
+        }
+      }
+
+      function stopRenderLoop() {
+        usingTrackProcessor = false;
+        if (trackReader) {
+          const readerToCancel = trackReader;
+          trackReader = null;
+          try { readerToCancel.cancel().catch(() => {}); } catch {}
+        }
+        if (drawRafId) {
+          cancelAnimationFrame(drawRafId);
+          drawRafId = null;
+        }
+        if (workerTimer) {
+          workerTimer.postMessage({ cmd: 'stop' });
+          workerTimer.terminate();
+          workerTimer = null;
+        }
+      }
+
+      function setRecordingLocks(locked) {
+        cameraSelect.disabled = locked;
+        micSelect.disabled = locked;
+        refreshDevicesBtn.disabled = locked;
+        mountModeSelect.disabled = locked;
+        outputResSelect.disabled = locked;
+        fpsSelect.disabled = locked;
+        bitrateSelect.disabled = locked;
+        formatSelect.disabled = locked;
+      }
+
+      function startRecording() {
+        showError('');
+        if (!mediaStream || sourceVideo.readyState < 2) {
+          showError('Camera is not ready yet.');
+          return;
+        }
+
+        // Draw one clean frame immediately before capturing stream
+        drawFrame();
+
+        const fps = Number(fpsSelect.value);
+        const canvasStream = canvas.captureStream(fps);
+        const tracks = [...canvasStream.getVideoTracks()];
+        const audioTracks = mediaStream.getAudioTracks();
+        if (audioTracks.length > 0) {
+          tracks.push(...audioTracks);
+        }
+
+        const combinedStream = new MediaStream(tracks);
+        const selectedMime = formatSelect.value;
+        const bitrate = Number(bitrateSelect.value);
+
+        let chosenMime = selectedMime;
+        if (audioTracks.length === 0 && chosenMime && chosenMime.includes('codecs=')) {
+          const videoOnlyMime = chosenMime.replace(/,[^;]+$/, '');
+          if (MediaRecorder.isTypeSupported(videoOnlyMime)) {
+            chosenMime = videoOnlyMime;
+          } else {
+            const containerOnly = chosenMime.split(';')[0];
+            chosenMime = MediaRecorder.isTypeSupported(containerOnly) ? containerOnly : '';
+          }
+        }
+
+        const options = { videoBitsPerSecond: bitrate };
+        if (chosenMime) {
+          options.mimeType = chosenMime;
+        }
+
+        try {
+          mediaRecorder = new MediaRecorder(combinedStream, options);
+        } catch (err) {
+          try {
+            mediaRecorder = new MediaRecorder(combinedStream, { videoBitsPerSecond: bitrate });
+          } catch (fallbackErr) {
+            canvasStream.getVideoTracks().forEach((t) => t.stop());
+            showError(`Could not start MediaRecorder: ${fallbackErr.message || err.message}`);
+            return;
+          }
+        }
+
+        recordedChunks = [];
+        const recordWidth = canvas.width;
+        const recordHeight = canvas.height;
+        const recordFps = fps;
+
+        mediaRecorder.ondataavailable = (ev) => {
+          if (ev.data && ev.data.size > 0) {
+            recordedChunks.push(ev.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const finalDurationMs = isPaused
+            ? accumulatedMs
+            : accumulatedMs + (performance.now() - recordingStartMs);
+
+          const actualMime = mediaRecorder.mimeType || selectedMime || 'video/webm';
+          const blob = new Blob(recordedChunks, { type: actualMime });
+          addRecordedTake(blob, actualMime, finalDurationMs, recordWidth, recordHeight, recordFps);
+
+          // Stop only the synthetic canvas video track; keep live camera preview running
+          canvasStream.getVideoTracks().forEach((t) => t.stop());
+          resetRecordingUI();
+        };
+
+        mediaRecorder.onerror = (ev) => {
+          showError(`Recording error: ${ev.error ? ev.error.message : 'Unknown error'}`);
+          stopRecording();
+        };
+
+        accumulatedMs = 0;
+        recordingStartMs = performance.now();
+        isRecording = true;
+        isPaused = false;
+
+        mediaRecorder.start(1000);
+        setRecordingLocks(true);
+
+        recBtn.disabled = true;
+        pauseBtn.disabled = false;
+        stopBtn.disabled = false;
+        pauseBtn.textContent = 'Pause';
+        recBadge.classList.add('active');
+        recBadge.classList.remove('paused');
+        camStatusPill.classList.add('rec');
+
+        recTimerText.textContent = '00:00';
+        timerInterval = setInterval(() => {
+          if (!isRecording || isPaused) return;
+          const elapsed = accumulatedMs + (performance.now() - recordingStartMs);
+          recTimerText.textContent = formatDuration(elapsed);
+        }, 250);
+      }
+
+      function togglePauseRecording() {
+        if (!mediaRecorder || !isRecording) return;
+        if (!isPaused) {
+          mediaRecorder.pause();
+          accumulatedMs += performance.now() - recordingStartMs;
+          isPaused = true;
+          pauseBtn.textContent = 'Resume';
+          recBadge.classList.add('paused');
+        } else {
+          mediaRecorder.resume();
+          recordingStartMs = performance.now();
+          isPaused = false;
+          pauseBtn.textContent = 'Pause';
+          recBadge.classList.remove('paused');
+        }
+      }
+
+      function stopRecording() {
+        if (!mediaRecorder || !isRecording) return;
+        stopBtn.disabled = true;
+        pauseBtn.disabled = true;
+        try {
+          mediaRecorder.stop();
+        } catch {
+          resetRecordingUI();
+        }
+      }
+
+      function resetRecordingUI() {
+        isRecording = false;
+        isPaused = false;
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+        setRecordingLocks(false);
+        recBtn.disabled = !mediaStream;
+        pauseBtn.disabled = true;
+        stopBtn.disabled = true;
+        pauseBtn.textContent = 'Pause';
+        recBadge.classList.remove('active', 'paused');
+        camStatusPill.classList.remove('rec');
+      }
+
+      function addRecordedTake(blob, mime, durationMs, w, h, fps) {
+        takeCounter += 1;
+        const url = URL.createObjectURL(blob);
+        recordedUrls.push(url);
+
+        const ext = mime.toLowerCase().includes('mp4') ? 'mp4' : 'webm';
+        const now = new Date();
+        const stamp = [
+          now.getFullYear(),
+          String(now.getMonth() + 1).padStart(2, '0'),
+          String(now.getDate()).padStart(2, '0'),
+          '-',
+          String(now.getHours()).padStart(2, '0'),
+          String(now.getMinutes()).padStart(2, '0'),
+          String(now.getSeconds()).padStart(2, '0')
+        ].join('');
+        const filename = `logitech-9x16-${w}x${h}-${stamp}.${ext}`;
+
+        const emptyEl = takesList.querySelector('.empty-takes');
+        if (emptyEl) emptyEl.remove();
+
+        const item = document.createElement('div');
+        item.className = 'take-item';
+
+        const videoEl = document.createElement('video');
+        videoEl.src = url;
+        videoEl.controls = true;
+        videoEl.playsInline = true;
+
+        const info = document.createElement('div');
+        info.className = 'take-info';
+
+        const title = document.createElement('div');
+        title.className = 'take-title';
+        title.textContent = `Take #${takeCounter} (${ext.toUpperCase()})`;
+
+        const meta = document.createElement('div');
+        meta.className = 'take-meta';
+        meta.textContent = `${w}×${h} • ${fps}fps • ${formatDuration(durationMs)} • ${formatBytes(blob.size)}`;
+
+        const actions = document.createElement('div');
+        actions.className = 'take-actions';
+
+        const dlLink = document.createElement('a');
+        dlLink.className = 'btn-link';
+        dlLink.href = url;
+        dlLink.download = filename;
+        dlLink.textContent = `Download .${ext}`;
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-sm';
+        delBtn.textContent = 'Delete';
+        delBtn.addEventListener('click', () => {
+          URL.revokeObjectURL(url);
+          item.remove();
+          updateTakesCount();
+          if (takesList.children.length === 0) {
+            takesList.innerHTML =
+              '<div class="empty-takes">No recordings yet. Press <strong>Start Recording</strong> to capture a 9:16 clip.</div>';
+          }
+        });
+
+        actions.appendChild(dlLink);
+        actions.appendChild(delBtn);
+
+        info.appendChild(title);
+        info.appendChild(meta);
+        info.appendChild(actions);
+
+        item.appendChild(videoEl);
+        item.appendChild(info);
+
+        takesList.prepend(item);
+        updateTakesCount();
+      }
+
+      function updateTakesCount() {
+        const count = takesList.querySelectorAll('.take-item').length;
+        takesCountText.textContent = `${count} ${count === 1 ? 'file' : 'files'}`;
+      }
+
+      // Event bindings
+      overlayStartBtn.addEventListener('click', startCamera);
+      refreshDevicesBtn.addEventListener('click', async () => {
+        if (!mediaStream) {
+          await startCamera();
+        } else {
+          await enumerateMediaDevices();
+        }
+      });
+
+      cameraSelect.addEventListener('change', () => {
+        if (mediaStream) startCamera();
+      });
+      micSelect.addEventListener('change', () => {
+        if (mediaStream) startCamera();
+      });
+      fpsSelect.addEventListener('change', () => {
+        syncCanvasDimensions();
+        if (mediaStream) startCamera();
+      });
+
+      mountModeSelect.addEventListener('change', () => {
+        if (mountModeSelect.value !== 'crop') {
+          if (outputResSelect.value === '608x1080' || outputResSelect.value === '720x1280') {
+            outputResSelect.value = '1080x1920';
+            syncCanvasDimensions();
+          }
+        } else if (outputResSelect.value === '1080x1920') {
+          outputResSelect.value = '720x1280';
+          syncCanvasDimensions();
+        }
+        updateQualityAdvice();
+      });
+
+      outputResSelect.addEventListener('change', syncCanvasDimensions);
+      formatSelect.addEventListener('change', updateFormatPill);
+
+      panSlider.addEventListener('input', () => {
+        const val = Number(panSlider.value);
+        panValueText.textContent = val === 50 ? 'Center (50%)' : `${val}%`;
+      });
+
+      mirrorPreviewCheck.addEventListener('change', () => {
+        canvas.classList.toggle('mirrored', mirrorPreviewCheck.checked);
+      });
+
+      gridGuideCheck.addEventListener('change', () => {
+        guideGrid.classList.toggle('visible', gridGuideCheck.checked);
+      });
+
+      recBtn.addEventListener('click', startRecording);
+      pauseBtn.addEventListener('click', togglePauseRecording);
+      stopBtn.addEventListener('click', stopRecording);
+
+      if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+        navigator.mediaDevices.addEventListener('devicechange', () => enumerateMediaDevices());
+      }
+
+      window.addEventListener('beforeunload', () => {
+        stopRenderLoop();
+        stopCurrentStream();
+        recordedUrls.forEach((u) => URL.revokeObjectURL(u));
+      });
+
+      // Init
+      populateFormats();
+      syncCanvasDimensions();
+      enumerateMediaDevices().then((res) => {
+        if (res && res.supported === false) {
+          showError(
+            'Camera API is unavailable on this page. Double-click Start_Recorder.bat to launch on http://127.0.0.1 in Chrome/Edge.'
+          );
+        }
+      }).catch(() => {});
+
+      if (location.protocol === 'file:') {
+        localhostLinkBtn.style.display = 'inline-block';
+        const pingScript = document.createElement('script');
+        pingScript.src = 'http://127.0.0.1:8090/ping.js';
+        pingScript.onload = () => {
+          if (window.__RECORDER_SERVER_READY__) {
+            window.location.replace('http://127.0.0.1:8090/');
+          }
+        };
+        pingScript.onerror = () => {};
+        document.head.appendChild(pingScript);
+      }
+
+      // Auto-start if permissions were granted; warn on load only on non-file:// origins
+      if (navigator.permissions && navigator.permissions.query) {
+        Promise.allSettled([
+          navigator.permissions.query({ name: 'camera' }),
+          navigator.permissions.query({ name: 'microphone' })
+        ]).then((results) => {
+          const camState = results[0].status === 'fulfilled' ? results[0].value.state : null;
+          if (camState === 'granted') {
+            startCamera();
+          } else if (camState === 'denied' && location.protocol !== 'file:') {
+            handleCameraError({ name: 'NotAllowedError', message: 'Permission denied' });
+          }
+        }).catch(() => {});
+      }
+    })();
+  </script>
+</body>
+</html>
